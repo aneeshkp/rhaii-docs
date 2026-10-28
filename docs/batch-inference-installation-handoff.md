@@ -81,14 +81,14 @@ The current `main` and the pending async-only operator release are transitional 
 Provide these before creating the `LLMBatchGateway` resource:
 
 - PostgreSQL for BatchGateway metadata and job state.
-- Redis or Valkey for the 3.6 async request/result transport.
+- Redis or Valkey only for the `asyncConfig.redis` transport. With `asyncConfig.sql`, PostgreSQL carries both metadata and async queue state.
 - S3-compatible object storage for input/output files, or an RWX PVC for filesystem storage.
 
 Use production-grade persistence, backups, credentials, TLS, and high availability. The charts in this repository do not provision these services.
 
 ## Step 1: Enable BatchGateway through the Helm chart
 
-### xKS
+### xKS without MaaS
 
 Create an overlay such as `values-batch-gateway-xks.yaml`:
 
@@ -105,8 +105,13 @@ components:
   aigateway:
     enabled: true
     spec:
+      modelsAsAService:
+        managementState: Removed
       batchGateway:
         managementState: Managed
+    modelsAsAService:
+      gateway:
+        create: false
 ```
 
 Install or upgrade the xKS chart with the cloud provider configuration required by the cluster:
@@ -122,9 +127,73 @@ helm upgrade --install rhai-xks ./charts/rhai-on-xks-chart \
   -f values-cloud-provider.yaml
 ```
 
+If you do not want a separate values file, use the equivalent inline configuration:
+
+```bash
+PULL_SECRET_FILE=~/pull-secret.json
+
+helm upgrade --install rhai-xks ./charts/rhai-on-xks-chart \
+  --namespace rhai-system \
+  --create-namespace \
+  --set-json 'components.kserve.gateway.allowedRoutes.namespaces={"from":"Selector","selector":{"matchLabels":{"llm-d.ai/gateway-route":"true"}}}' \
+  --set components.aigateway.enabled=true \
+  --set components.aigateway.spec.modelsAsAService.managementState=Removed \
+  --set components.aigateway.modelsAsAService.gateway.create=false \
+  --set components.aigateway.spec.batchGateway.managementState=Managed \
+  --set-file imagePullSecret.dockerConfigJson="${PULL_SECRET_FILE}" \
+  -f values-cloud-provider.yaml
+```
+
 The chart creates the `Platform` and `AIGateway` resources. The AI Gateway operator then deploys the BatchGateway operator from the release's pinned manifests and images.
 
 Do **not** also apply the standalone operator overlay from the generic Red Hat AI Inference guide. That would create a second operator ownership path.
+
+### xKS with MaaS
+
+Use this profile when Models as a Service owns the external gateway and API-key authentication. Enable both MaaS and BatchGateway in the AI Gateway component:
+
+```yaml
+components:
+  kserve:
+    gateway:
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              llm-d.ai/gateway-route: "true"
+  aigateway:
+    enabled: true
+    spec:
+      modelsAsAService:
+        managementState: Managed
+      batchGateway:
+        managementState: Managed
+    modelsAsAService:
+      gateway:
+        create: true
+        allowedRoutes:
+          namespaces:
+            from: Selector
+            selector:
+              matchLabels:
+                maas-gateway-access: "true"
+```
+
+Install or upgrade with a separate values file, for example:
+
+```bash
+PULL_SECRET_FILE=~/pull-secret.json
+
+helm upgrade --install rhai-xks ./charts/rhai-on-xks-chart \
+  --namespace rhai-system \
+  --create-namespace \
+  --set-file imagePullSecret.dockerConfigJson="${PULL_SECRET_FILE}" \
+  -f values-batch-gateway-xks-maas.yaml \
+  -f values-cloud-provider.yaml
+```
+
+The MaaS gateway and BatchGateway API must use compatible route-attachment labels. The MaaS integration uses API keys and forwards `Authorization` plus any required subscription header through `passThroughHeaders`.
 
 The xKS chart's relevant default is in `charts/rhai-on-xks-chart/values.yaml`:
 
@@ -137,12 +206,28 @@ components:
         managementState: Removed
 ```
 
-### OpenShift
+### OpenShift without MaaS (RHAII profile)
 
 Create an overlay such as `values-batch-gateway-openshift.yaml`:
 
 ```yaml
 components:
+  kserve:
+    dsc:
+      managementState: Managed
+    gateway:
+      spec:
+        gatewayClassName: openshift-ai-inference
+        listeners:
+          - name: https
+            port: 443
+            protocol: HTTPS
+            allowedRoutes:
+              namespaces:
+                from: Selector
+                selector:
+                  matchLabels:
+                    llm-d.ai/gateway-route: "true"
   aigateway:
     dsc:
       managementState: Managed
@@ -163,13 +248,16 @@ components:
       rhcl: true
 ```
 
-Install or upgrade the OpenShift chart:
+The `rhaii` profile enables the RHAII inference/model-serving stack. Use `operator.type=odh` for an Open Data Hub installation or `operator.type=rhoai` for a Red Hat OpenShift AI installation:
 
 ```bash
-helm upgrade --install rhai-openshift ./charts/rhai-on-openshift-chart \
-  --namespace rhai-gitops \
+OPERATOR_TYPE=odh # use rhoai for RHOAI
+
+helm upgrade --install "${OPERATOR_TYPE}" ./charts/rhai-on-openshift-chart \
+  --namespace "${OPERATOR_TYPE}-gitops" \
   --create-namespace \
-  --set operator.type=rhoai \
+  --set profile=rhaii \
+  --set operator.type="${OPERATOR_TYPE}" \
   -f values-batch-gateway-openshift.yaml
 ```
 
@@ -187,6 +275,66 @@ spec:
 ```
 
 The OpenShift chart does not need the xKS `Platform` or component-CR configuration. The ODH/RHOAI operator and AI Gateway operator own that reconciliation path.
+
+### OpenShift with MaaS
+
+Use the same `rhaii` profile, but set the AI Gateway MaaS sub-component to `Managed` and configure the MaaS Gateway listener's route selector:
+
+```yaml
+components:
+  kserve:
+    dsc:
+      managementState: Managed
+    gateway:
+      spec:
+        gatewayClassName: openshift-ai-inference
+        listeners:
+          - name: https
+            port: 443
+            protocol: HTTPS
+            allowedRoutes:
+              namespaces:
+                from: Selector
+                selector:
+                  matchLabels:
+                    llm-d.ai/gateway-route: "true"
+  aigateway:
+    dsc:
+      managementState: Managed
+      modelsAsAService:
+        managementState: Managed
+      batchGateway:
+        managementState: Managed
+    modelsAsAService:
+      gateway:
+        spec:
+          gatewayClassName: maas-gateway-class
+          listeners:
+            - name: https
+              port: 443
+              protocol: HTTPS
+              allowedRoutes:
+                namespaces:
+                  from: Selector
+                  selector:
+                    matchLabels:
+                      maas-gateway-access: "true"
+```
+
+Install with either operator type:
+
+```bash
+OPERATOR_TYPE=rhoai # use odh for Open Data Hub
+
+helm upgrade --install "${OPERATOR_TYPE}" ./charts/rhai-on-openshift-chart \
+  --namespace "${OPERATOR_TYPE}-gitops" \
+  --create-namespace \
+  --set profile=rhaii \
+  --set operator.type="${OPERATOR_TYPE}" \
+  -f values-batch-gateway-openshift-maas.yaml
+```
+
+Label every namespace that attaches routes to the MaaS Gateway with `maas-gateway-access=true`. In the MaaS profile, use the SQL async transport, keep PostgreSQL available, and configure `passThroughHeaders` for `Authorization` and any required MaaS subscription header.
 
 ### Verify operator enablement
 
@@ -218,6 +366,18 @@ kubectl explain llmbatchgateway.spec.tls --recursive
 ```
 
 The xKS chart snapshot confirms that the chart creates the BatchGateway operator ServiceAccount and related platform resources, not the `LLMBatchGateway` workload, backing services, or batch routes.
+
+## Migration warning: sync to async is breaking
+
+RHAII 3.6 supports asynchronous dispatch only. The async-only operator change is not an in-place conversion for an existing synchronous deployment:
+
+1. Stop submitting new batches.
+2. Drain active batches and the selected Redis/Valkey or SQL dispatch queue. Confirm that no jobs remain in flight using the Batch API, operator status, and the transport's metrics or logs. Do not delete the old `LLMBatchGateway` resource while work is still pending.
+3. Keep PostgreSQL and the file-storage backend. PostgreSQL and object storage contain completed job state and results; deleting them destroys the migration data.
+4. After the queue and active work are drained, delete the old synchronous `LLMBatchGateway` resource.
+5. Deploy the async-only operator release and apply a new CR with `processor.asyncConfig` and exactly one transport (`redis` or `sql`). Do not restore `dispatchMode: sync` or `globalInferenceGateway`.
+
+Deleting the old resource before the drain loses in-flight batches. There is no sync-to-async compatibility mode in operator PR #125; treat the migration as a controlled stop, drain, delete, and redeploy operation.
 
 ## Step 2: Prepare namespaces and access labels
 
