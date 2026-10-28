@@ -57,6 +57,22 @@ The installation has four layers:
 
 The linked Red Hat AI Inference guide includes all four layers. The current charts cover only layer 1 and selected platform dependencies. The remaining resources must be supplied by the deployment or by a future GitOps layer.
 
+## Three deployment paths
+
+### 1. RHAII on xKS
+
+The xKS chart does not use OLM and does not create a `DataScienceCluster` or `DSCInitialization`. Helm installs the `rhai-operator` Deployment directly, creates the `config.opendatahub.io/v1alpha2` `Platform` custom resource and component custom resources, and deploys the cloud-manager operators. The directly installed operator reconciles the `Platform` and component resources.
+
+### 2. RHAII on OpenShift through the chart
+
+The OpenShift chart uses `profile=rhaii` and `operator.type=rhoai`. Helm configures the RHOAI OLM subscription and renders `DSCInitialization` and `DataScienceCluster` resources. The `rhods-operator`, AI Gateway operator, and BatchGateway operator perform the reconciliation.
+
+### 3. RHOAI through OpenShift AI
+
+The platform team installs or manages RHOAI through the OpenShift AI operator and configures the `DataScienceCluster` directly. The RHOAI operator, AI Gateway operator, and BatchGateway operator then use the same DSC-based reconciliation path as the chart-driven RHAII-on-OpenShift option.
+
+The second and third options differ in the installation/configuration entry point, not the underlying OpenShift operator architecture. The xKS option is the distinct non-OpenShift path: it uses the directly installed `rhai-operator` and `Platform` resources instead of OLM and DSC.
+
 ## Ownership matrix
 
 | Resource or setting | xKS chart | OpenShift chart | Required action |
