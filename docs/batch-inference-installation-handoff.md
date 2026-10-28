@@ -11,7 +11,7 @@ This document compares the Red Hat AI Inference 3.6 BatchGateway installation bo
 BatchGateway is **user opt-in**. Enabling the AI Gateway module does not automatically enable BatchGateway.
 
 > Batch inference is a Technology Preview feature in the referenced Red Hat documentation. Follow the support statement for the exact RHAII 3.6 product release being documented.
-> **Version matrix:** the target RHAII/RHOAI product procedure is 3.6. The OpenShift chart metadata is `3.6.0`; the xKS chart metadata remains `3.5.0`, so this document does not claim that the xKS chart itself is a 3.6 product bundle. Before deployment, verify that the pinned AI Gateway and BatchGateway operator images provide the RHAII/RHOAI 3.6 CRD described here.
+> **Version matrix:** the target RHAII/RHOAI product procedure and the intended `odh-gitops` chart metadata are 3.6.0. The xKS `v3.6.0` OCI tag and an OpenShift OCI chart path were not confirmed in the Red Hat registry during validation; verify the release artifacts before production deployment.
 
 ## Contents
 
@@ -61,8 +61,8 @@ BatchGateway is **user opt-in**. Enabling the AI Gateway module does not automat
 | Item | Version or source | Evidence |
 |---|---|---|
 | Target RHAII/RHOAI procedure | 3.6 | This handoff scope |
-| xKS chart | `3.5.0` for both chart `version` and `appVersion` | `charts/rhai-on-xks-chart/Chart.yaml` |
-| OpenShift chart | `3.6.0` for both chart `version` and `appVersion` | `charts/rhai-on-openshift-chart/Chart.yaml` |
+| xKS chart | Intended `3.6.0` chart and app version | [odh-gitops xKS Chart.yaml](https://github.com/opendatahub-io/odh-gitops/blob/main/charts/rhai-on-xks-chart/Chart.yaml) |
+| OpenShift chart | `3.6.0` chart and app version | [odh-gitops OpenShift Chart.yaml](https://github.com/opendatahub-io/odh-gitops/blob/main/charts/rhai-on-openshift-chart/Chart.yaml) |
 | ODH operator | Channel `fast-3`, `community-operators`, `opendatahub-operator` | `charts/rhai-on-openshift-chart/values.yaml` |
 | RHOAI operator | Channel `beta`, `redhat-operators`, `rhods-operator` | `charts/rhai-on-openshift-chart/values.yaml` |
 | xKS cert-manager chart dependency | `1.1.0` | `charts/rhai-on-xks-chart/Chart.yaml` |
@@ -170,6 +170,15 @@ Use production-grade persistence, backups, credentials, TLS, and high availabili
 
 ## Step 1: Enable BatchGateway through the Helm chart
 
+**Production chart source:** Authenticate Helm to `registry.redhat.io` before checking or installing a release chart:
+
+```bash
+helm registry login registry.redhat.io
+```
+
+> **Registry validation status:** `oci://registry.redhat.io/rhai/rhai-on-xks-chart:v3.5.0` resolves. The requested `v3.6.0` and minor-only `v3.6` xKS tags did not resolve during validation. The OpenShift chart OCI path is unconfirmed. Do not treat either 3.6 OCI reference below as a production artifact until the RHAII 3.6 release publishes and documents it.
+
+
 ### xKS without MaaS
 
 Create an overlay such as `values-batch-gateway-xks.yaml`:
@@ -201,7 +210,7 @@ Install or upgrade the xKS chart with the cloud provider configuration required 
 ```bash
 PULL_SECRET_FILE=~/pull-secret.json
 
-helm upgrade --install rhai-xks ./charts/rhai-on-xks-chart \
+helm upgrade --install rhai-xks oci://registry.redhat.io/rhai/rhai-on-xks-chart:v3.6.0 \
   --namespace rhai-system \
   --create-namespace \
   --set-file imagePullSecret.dockerConfigJson="${PULL_SECRET_FILE}" \
@@ -214,7 +223,7 @@ If you do not want a separate values file, use the equivalent inline configurati
 ```bash
 PULL_SECRET_FILE=~/pull-secret.json
 
-helm upgrade --install rhai-xks ./charts/rhai-on-xks-chart \
+helm upgrade --install rhai-xks oci://registry.redhat.io/rhai/rhai-on-xks-chart:v3.6.0 \
   --namespace rhai-system \
   --create-namespace \
   --set-json 'components.kserve.gateway.allowedRoutes.namespaces={"from":"Selector","selector":{"matchLabels":{"llm-d.ai/gateway-route":"true"}}}' \
@@ -267,7 +276,7 @@ Install or upgrade with a separate values file, for example:
 ```bash
 PULL_SECRET_FILE=~/pull-secret.json
 
-helm upgrade --install rhai-xks ./charts/rhai-on-xks-chart \
+helm upgrade --install rhai-xks oci://registry.redhat.io/rhai/rhai-on-xks-chart:v3.6.0 \
   --namespace rhai-system \
   --create-namespace \
   --set-file imagePullSecret.dockerConfigJson="${PULL_SECRET_FILE}" \
@@ -333,7 +342,7 @@ components:
 The `rhaii` profile selects the RHAII inference stack. On the RHOAI platform, use `operator.type=rhoai`; this chart path still renders `DSCInitialization` and `DataScienceCluster` resources for the RHOAI operator:
 
 ```bash
-helm upgrade --install rhoai ./charts/rhai-on-openshift-chart \
+helm upgrade --install rhoai oci://registry.redhat.io/rhai/rhai-on-openshift-chart:v3.6.0 \
   --namespace rhoai-gitops \
   --create-namespace \
   --set profile=rhaii \
@@ -410,7 +419,7 @@ components:
 Install with the RHOAI operator:
 
 ```bash
-helm upgrade --install rhoai ./charts/rhai-on-openshift-chart \
+helm upgrade --install rhoai oci://registry.redhat.io/rhai/rhai-on-openshift-chart:v3.6.0 \
   --namespace rhoai-gitops \
   --create-namespace \
   --set profile=rhaii \
@@ -1090,11 +1099,11 @@ For the product documentation team:
 ## Primary references
 
 - Red Hat AI Inference 3.6 Batch inference guide for the target product release. The direct 3.6 documentation URL was not available during validation; do not substitute the 3.5 URL.
-- [xKS chart values](../charts/rhai-on-xks-chart/values.yaml)
-- [xKS chart BatchGateway section](../charts/rhai-on-xks-chart/README.md#batch-gateway)
-- [xKS BatchGateway rendered snapshot](../charts/rhai-on-xks-chart/test/snapshots/azure-with-batch-gateway.snap.yaml)
-- [OpenShift chart values](../charts/rhai-on-openshift-chart/values.yaml)
-- [OpenShift chart DSC template](../charts/rhai-on-openshift-chart/templates/operator/datasciencecluster.yaml)
+- [xKS chart values](https://github.com/opendatahub-io/odh-gitops/blob/main/charts/rhai-on-xks-chart/values.yaml)
+- [xKS chart BatchGateway section](https://github.com/opendatahub-io/odh-gitops/blob/main/charts/rhai-on-xks-chart/README.md#batch-gateway)
+- [xKS BatchGateway rendered snapshot](https://github.com/opendatahub-io/odh-gitops/blob/main/charts/rhai-on-xks-chart/test/snapshots/azure-with-batch-gateway.snap.yaml)
+- [OpenShift chart values](https://github.com/opendatahub-io/odh-gitops/blob/main/charts/rhai-on-openshift-chart/values.yaml)
+- [OpenShift chart DSC template](https://github.com/opendatahub-io/odh-gitops/blob/main/charts/rhai-on-openshift-chart/templates/operator/datasciencecluster.yaml)
 - [llm-d BatchGateway operator API at async-only PR #125 head](https://github.com/opendatahub-io/llm-d-batch-gateway-operator/blob/74c558c/api/v1alpha1/llmbatchgateway_types.go)
 - [llm-d-async API at async-only PR #125 head](https://github.com/opendatahub-io/llm-d-batch-gateway-operator/blob/74c558c/api/v1alpha1/llmdasync_types.go)
 - [llm-d BatchGateway installation guide](https://llm-d.ai/docs/operations/batch-serving/batch-gateway)
