@@ -12,6 +12,28 @@ BatchGateway is **user opt-in**. Enabling the AI Gateway module does not automat
 > Batch inference is a Technology Preview feature in the referenced Red Hat documentation. Follow the support statement for the exact RHAII 3.6 product release being documented.
 > **Version matrix:** the target RHAII/RHOAI product procedure is 3.6. The OpenShift chart metadata is `3.6.0`; the xKS chart metadata remains `3.5.0`, so this document does not claim that the xKS chart itself is a 3.6 product bundle. Before deployment, verify that the pinned AI Gateway and BatchGateway operator images provide the RHAII/RHOAI 3.6 CRD described here.
 
+## Versions used
+
+| Item | Version or source | Evidence |
+|---|---|---|
+| Target RHAII/RHOAI procedure | 3.6 | This handoff scope |
+| xKS chart | `3.5.0` for both chart `version` and `appVersion` | `charts/rhai-on-xks-chart/Chart.yaml` |
+| OpenShift chart | `3.6.0` for both chart `version` and `appVersion` | `charts/rhai-on-openshift-chart/Chart.yaml` |
+| ODH operator | Channel `fast-3`, `community-operators`, `opendatahub-operator` | `charts/rhai-on-openshift-chart/values.yaml` |
+| RHOAI operator | Channel `beta`, `redhat-operators`, `rhods-operator` | `charts/rhai-on-openshift-chart/values.yaml` |
+| xKS cert-manager chart dependency | `1.1.0` | `charts/rhai-on-xks-chart/Chart.yaml` |
+| xKS cert-manager bundle | `v1.18.1` in values; rendered snapshots currently show operand image version `1.18.4` | `charts/rhai-on-xks-chart/values.yaml` and chart snapshots |
+| OpenShift cert-manager operator | Channel `stable-v1` | `charts/rhai-on-openshift-chart/values.yaml` |
+| OpenShift LeaderWorkerSet operator | Channel `stable-v1.0` | `charts/rhai-on-openshift-chart/values.yaml` |
+| OpenShift RHCL operator | Channel `stable` | `charts/rhai-on-openshift-chart/values.yaml` |
+| BatchGateway CRD | `batch.llm-d.ai/v1alpha1` | BatchGateway operator CRD |
+| OpenShift DSC | `datasciencecluster.opendatahub.io/v3` | `charts/rhai-on-openshift-chart/templates/operator/datasciencecluster.yaml` |
+| OpenShift DSCInitialization | `dscinitialization.opendatahub.io/v2` | `charts/rhai-on-openshift-chart/templates/operator/dscinitialization.yaml` |
+| xKS AI Gateway, BatchGateway, and `llm-d-async` images | No default version pins in `values.yaml`; release `RELATED_IMAGE_*` values supply them | `charts/rhai-on-xks-chart/values.yaml` and `scripts/sync-e2e-images.sh` |
+| xKS guide PR #319 head | `b70a29b` | Upstream PR head |
+| MaaS guide PR #312 head | `241c6c6` | Upstream PR head |
+| Async-only operator PR #125 head | `74c558c` | Upstream PR head |
+
 ## Pending 3.6 GA alignment
 
 The docs team should track these pending upstream changes when finalizing the RHAII 3.6 GA procedure:
@@ -343,6 +365,8 @@ helm upgrade --install "${OPERATOR_TYPE}" ./charts/rhai-on-openshift-chart \
 Label every namespace that attaches routes to the MaaS Gateway with `maas-gateway-access=true`; apply that label to the BatchGateway and model namespaces before creating their HTTPRoutes. Provide the referenced `<maas-gateway-tls-secret>` before creating the HTTPS Gateway. In the MaaS profile, use the SQL async transport, keep PostgreSQL available, and configure `passThroughHeaders` for `Authorization` and any required MaaS subscription header.
 
 ### How RHOAI deploys BatchGateway through the DataScienceCluster
+
+**Terminology:** RHAII is the inference stack/profile configured by these charts. RHOAI is the OpenShift AI platform and operator selected with `operator.type=rhoai`; the RHOAI operator reconciles the DataScienceCluster. These are integration layers, not two separate OpenShift chart versions.
 
 For RHOAI on OpenShift, the chart does not install the BatchGateway workloads directly. The deployment chain is:
 
