@@ -28,7 +28,7 @@ The Helm charts only enable the operator layer. They do not install or configure
 
 The installation has four layers:
 
-1. **Platform/operator enablement** — managed by this repository.
+1. **Platform/operator enablement** — configured by this repository; the platform and AI Gateway operators perform the actual reconciliation.
 2. **BatchGateway workload configuration** — an `LLMBatchGateway` custom resource, managed separately by the BatchGateway operator.
 3. **Inference routing and flow control** — internal Gateway, HTTPRoutes, `InferenceObjective` resources, and authorization policies.
 4. **Backing services** — PostgreSQL, Redis/Valkey, and S3-compatible storage or RWX filesystem storage.
