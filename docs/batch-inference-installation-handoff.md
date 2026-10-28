@@ -12,6 +12,48 @@ BatchGateway is **user opt-in**. Enabling the AI Gateway module does not automat
 > Batch inference is a Technology Preview feature in the referenced Red Hat documentation. Follow the support statement for the exact RHAII 3.6 product release being documented.
 > **Version matrix:** the target RHAII/RHOAI product procedure is 3.6. The OpenShift chart metadata is `3.6.0`; the xKS chart metadata remains `3.5.0`, so this document does not claim that the xKS chart itself is a 3.6 product bundle. Before deployment, verify that the pinned AI Gateway and BatchGateway operator images provide the RHAII/RHOAI 3.6 CRD described here.
 
+## Contents
+
+- [Purpose](#purpose)
+- [Versions used](#versions-used)
+- [Pending 3.6 GA alignment](#pending-36-ga-alignment)
+- [Executive summary](#executive-summary)
+- [Three deployment paths](#three-deployment-paths)
+  - [RHAII on xKS](#1-rhaii-on-xks)
+  - [RHAII on OpenShift through the chart](#2-rhaii-on-openshift-through-the-chart)
+  - [RHOAI through OpenShift AI](#3-rhoai-through-openshift-ai)
+- [Ownership matrix](#ownership-matrix)
+- [Terminology: Batch API versus Async Processor](#terminology-batch-api-versus-async-processor)
+- [Prerequisites](#prerequisites)
+  - [Cluster and tooling](#cluster-and-tooling)
+  - [Backing services](#backing-services)
+- [Step 1: Enable BatchGateway through the Helm chart](#step-1-enable-batchgateway-through-the-helm-chart)
+  - [xKS without MaaS](#xks-without-maas)
+  - [xKS with MaaS](#xks-with-maas)
+  - [RHAII on OpenShift without MaaS](#rhaii-on-openshift-without-maas)
+  - [RHAII on OpenShift with MaaS](#rhaii-on-openshift-with-maas)
+  - [How RHOAI deploys BatchGateway through the DataScienceCluster](#how-rhoai-deploys-batchgateway-through-the-datasciencecluster)
+  - [Verify operator enablement](#verify-operator-enablement)
+- [Migration warning: sync to async is breaking](#migration-warning-sync-to-async-is-breaking)
+- [Step 2: Prepare namespaces and access labels](#step-2-prepare-namespaces-and-access-labels)
+- [Step 3: Configure model priority and flow control](#step-3-configure-model-priority-and-flow-control)
+- [Step 4: Create the internal model gateway](#step-4-create-the-internal-model-gateway)
+- [Step 5: Route the processor to the model](#step-5-route-the-processor-to-the-model)
+- [Step 6: Configure authorization](#step-6-configure-authorization)
+- [Step 7: Create storage credentials](#step-7-create-storage-credentials)
+- [Step 8: Create the `LLMBatchGateway` workload resource](#step-8-create-the-llmbatchgateway-workload-resource)
+  - [Async processor dispatch (required for RHAII 3.6)](#async-processor-dispatch-required-for-rhaii-36)
+  - [SQL transport variant](#sql-transport-variant)
+  - [Filesystem storage variant](#filesystem-storage-variant)
+  - [TLS variants](#tls-variants)
+  - [Optional async processor configuration](#optional-async-processor-configuration)
+- [Step 9: Expose the external Batch API](#step-9-expose-the-external-batch-api)
+- [Step 10: Verify the installation](#step-10-verify-the-installation)
+- [Step 11: Submit a test batch](#step-11-submit-a-test-batch)
+- [Gaps in the current `odh-gitops` charts](#gaps-in-the-current-odh-gitops-charts)
+- [Recommended documentation split](#recommended-documentation-split)
+- [Primary references](#primary-references)
+
 ## Versions used
 
 | Item | Version or source | Evidence |
