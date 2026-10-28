@@ -91,7 +91,6 @@ Use production-grade persistence, backups, credentials, TLS, and high availabili
 ### xKS
 
 Create an overlay such as `values-batch-gateway-xks.yaml`:
-
 ```yaml
 components:
   kserve:
@@ -112,9 +111,12 @@ components:
 Install or upgrade the xKS chart with the cloud provider configuration required by the cluster:
 
 ```bash
+PULL_SECRET_FILE=~/pull-secret.json
+
 helm upgrade --install rhai-xks ./charts/rhai-on-xks-chart \
   --namespace rhai-system \
   --create-namespace \
+  --set-file imagePullSecret.dockerConfigJson="${PULL_SECRET_FILE}" \
   -f values-batch-gateway-xks.yaml \
   -f values-cloud-provider.yaml
 ```
