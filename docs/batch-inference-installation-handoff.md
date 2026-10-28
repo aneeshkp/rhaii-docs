@@ -2,10 +2,11 @@
 
 ## Purpose
 
-This document compares the Red Hat AI Inference 3.6 BatchGateway installation boundary with the current `odh-gitops` Helm charts. It is intended for the documentation team and covers the complete installation boundary for both:
+This document compares the Red Hat AI Inference 3.6 BatchGateway installation boundary with the current `odh-gitops` Helm charts. It is intended for the documentation team and covers three complete installation paths:
 
-- `charts/rhai-on-xks-chart` — non-OpenShift Kubernetes with the xKS chart.
-- `charts/rhai-on-openshift-chart` — ODH/RHOAI on OpenShift with a DataScienceCluster.
+- **RHAII on xKS** — `charts/rhai-on-xks-chart` installs the non-OpenShift Kubernetes path.
+- **RHAII on OpenShift through the chart** — `charts/rhai-on-openshift-chart` configures the `rhaii` profile and RHOAI operator/DataScienceCluster path.
+- **RHOAI through OpenShift AI** — the platform team manages the RHOAI operator and `DataScienceCluster` directly, without requiring the RHAII Helm chart.
 
 BatchGateway is **user opt-in**. Enabling the AI Gateway module does not automatically enable BatchGateway.
 
