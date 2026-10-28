@@ -10,7 +10,7 @@ This document compares the Red Hat AI Inference 3.6 BatchGateway installation bo
 BatchGateway is **user opt-in**. Enabling the AI Gateway module does not automatically enable BatchGateway.
 
 > Batch inference is a Technology Preview feature in the referenced Red Hat documentation. Follow the support statement for the exact RHAII 3.6 product release being documented.
-> **Version boundary:** the current xKS chart metadata is `3.5.0`. This document does not claim that the chart itself is a 3.6 product bundle. Before deployment, verify that the pinned AI Gateway and BatchGateway operator images provide the RHAII 3.6 CRD described here.
+> **Version matrix:** the target RHAII/RHOAI product procedure is 3.6. The OpenShift chart metadata is `3.6.0`; the xKS chart metadata remains `3.5.0`, so this document does not claim that the xKS chart itself is a 3.6 product bundle. Before deployment, verify that the pinned AI Gateway and BatchGateway operator images provide the RHAII/RHOAI 3.6 CRD described here.
 
 ## Pending 3.6 GA alignment
 
@@ -341,6 +341,50 @@ helm upgrade --install "${OPERATOR_TYPE}" ./charts/rhai-on-openshift-chart \
 ```
 
 Label every namespace that attaches routes to the MaaS Gateway with `maas-gateway-access=true`; apply that label to the BatchGateway and model namespaces before creating their HTTPRoutes. Provide the referenced `<maas-gateway-tls-secret>` before creating the HTTPS Gateway. In the MaaS profile, use the SQL async transport, keep PostgreSQL available, and configure `passThroughHeaders` for `Authorization` and any required MaaS subscription header.
+
+### How RHOAI deploys BatchGateway through the DataScienceCluster
+
+For RHOAI on OpenShift, the chart does not install the BatchGateway workloads directly. The deployment chain is:
+
+1. Helm installs or configures the RHOAI operator subscription with `operator.type=rhoai`.
+2. Helm renders the `DataScienceCluster` resource, normally `default-dsc`.
+3. The RHOAI operator watches the DSC and reconciles its managed components and dependencies.
+4. `spec.components.aigateway.batchGateway.managementState: Managed` enables BatchGateway through the AI Gateway component.
+5. The AI Gateway operator deploys the BatchGateway operator.
+6. The BatchGateway operator watches `LLMBatchGateway` resources and creates the API server, processor, async processor, garbage collector, Certificate, and any operator-managed HTTPRoute.
+
+The DSC fragment for a non-MaaS RHAII deployment is:
+
+```yaml
+apiVersion: datasciencecluster.opendatahub.io/v3
+kind: DataScienceCluster
+metadata:
+  name: default-dsc
+spec:
+  components:
+    kserve:
+      managementState: Managed
+    aigateway:
+      managementState: Managed
+      modelsAsAService:
+        managementState: Removed
+      batchGateway:
+        managementState: Managed
+```
+
+For MaaS, change `modelsAsAService.managementState` to `Managed` and configure the MaaS Gateway listener, TLS Secret, and route selector as shown above. Keep `batchGateway.managementState: Managed` in both profiles. Do not create a second DSC or install the BatchGateway operator with a standalone Kustomize overlay.
+
+Verify each reconciliation layer independently:
+
+```bash
+oc get subscription rhods-operator -n redhat-ods-operator
+oc get csv -n redhat-ods-operator
+oc get datasciencecluster default-dsc -o yaml
+oc get pods -n redhat-ods-applications
+oc get deploy -n redhat-ods-applications
+oc get crd llmbatchgateways.batch.llm-d.ai
+oc get pods -A -l app.kubernetes.io/name=batch-gateway-operator
+```
 
 ### Verify operator enablement
 
