@@ -143,7 +143,7 @@ These terms describe different layers:
 - **Async dispatch** is required by the RHAII 3.6 product procedure. In the current chart/operator path it uses a Redis/Valkey or SQL queue plus dispatch gates and worker pools. It is not enabled merely by setting `batchGateway.managementState: Managed`.
 - **The BatchGateway API is asynchronous even though the operator also runs a core processor and an additional async-processor**. Do not confuse the user-facing Batch API with the internal async processor.
 
-The current `main` and the pending async-only operator release are transitional APIs. The primary examples below use the async-only field set and omit `dispatchMode` and `globalInferenceGateway`. If deploying against a pre-#125 operator release, add `dispatchMode: async`; after operator PR #125 merges, `processor.asyncConfig` is required and `processor.modelGateways` accepts only async model/queue fields. Use the CRD installed in the target 3.6 release as the source of truth.
+This handoff targets the async-only operator API at [PR #125 head `74c558c`](https://github.com/opendatahub-io/llm-d-batch-gateway-operator/tree/74c558c). The primary examples omit `dispatchMode` and `globalInferenceGateway`; `processor.asyncConfig` is required and `processor.modelGateways` accepts only async model/queue fields. If deploying against a pre-#125 operator release, add `dispatchMode: async` and use that release's CRD as the source of truth.
 
 ## Prerequisites
 
@@ -733,7 +733,7 @@ For the documented 3.6 product configuration:
 
 The example below uses Redis/Valkey transport, Prometheus saturation gates, and Redis-quota worker pools.
 
-The current `main` CRD uses `dbBackend: postgresql` and supports both Redis and SQL async transports. The RHAII 3.6 product path can use either transport when the selected operator image and backing services support it; the examples below show both.
+The #125 head CRD uses `dbBackend: postgresql` and supports both Redis and SQL async transports. The RHAII 3.6 product path can use either transport when the selected operator image and backing services support it; the examples below show both.
 
 ```yaml
 spec:
@@ -795,7 +795,7 @@ spec:
 
 ```
 
-The current `main` CRD exposes both `asyncConfig.redis` and `asyncConfig.sql`; they are mutually exclusive. Redis/Valkey credentials are read from the referenced Secret when the Redis transport is selected. PostgreSQL is required for the documented metadata path and for SQL transport.
+The #125 head CRD exposes both `asyncConfig.redis` and `asyncConfig.sql`; they are mutually exclusive. Redis/Valkey credentials are read from the operator-managed Secret when the Redis transport is selected. PostgreSQL is required for the documented metadata path and for SQL transport.
 
 On pre-#125 operator releases, `dispatchMode: async` causes the BatchGateway operator to deploy the additional `llm-d-async` processor. Operator PR #125 deploys that processor unconditionally because async is the only dispatch path. Do not install a separate `llm-d-async` deployment.
 
@@ -913,7 +913,7 @@ processor:
       interval: 15s
 ```
 
-`asyncConfig.replicas` is reserved by the current operator and does not change the async-processor replica count. Do not use it as a scaling control without confirming a later operator version.
+At the reviewed #125 head, `asyncConfig.replicas` is reserved and the upstream `llm-d-async` chart still hardcodes one replica. If the planned PR fix wires this field to the chart before RHAII 3.6 GA, use the final CRD and rendered Deployment behavior instead; until that is verified, do not rely on this field for scaling.
 
 ### Complete async processor configuration inventory
 
@@ -921,7 +921,7 @@ The examples above cover the supported Redis/Valkey and PostgreSQL transport pat
 
 | Field | Purpose |
 |---|---|
-| `replicas` | Reserved by the current operator; it does not scale or suspend `llm-d-async`. |
+| `replicas` | Async processor replica setting. At the reviewed #125 head it is reserved/ignored because the upstream chart hardcodes one replica; use the final GA CRD behavior if the planned PR fix lands. |
 | `resources` | CPU and memory requests/limits for the async processor. |
 | `imagePullPolicy` | Container image pull policy. |
 | `inferenceGateway` | Default inference gateway connection; queue-level `igwBaseURL` can override it. |
@@ -937,9 +937,9 @@ The examples above cover the supported Redis/Valkey and PostgreSQL transport pat
 | `transformConfig` | Request transforms with `name`, `type`, and arbitrary `parameters`. |
 | `modelServerMonitor` | Optional model-server `PodMonitor`: `enabled`, `selector`, `port`, `path`, and `interval`. |
 
-Async queue entries support these per-queue overrides: `name`, `workerPoolID`, `igwBaseURL`, `requestPathURL`, `gateType`, and `gateParams`. `processor.modelGateways.<model-id>` also supports the async pool/objective and queue fields plus per-gateway timeout, retry/backoff, and TLS settings from `InferenceGatewaySpec`.
+Async queue entries support these per-queue overrides: `name`, `workerPoolID`, `igwBaseURL`, `requestPathURL`, `gateType`, and `gateParams`. At the #125 head, `processor.modelGateways.<model-id>` supports `inferencePoolName`, `inferenceObjective`, `requestQueueName`, and `resultQueueName`; it does not expose the newer per-gateway timeout, retry/backoff, or TLS fields.
 
-This is the complete configuration surface exposed by the current `LLMBatchGateway` CRD for `llm-d-async`; it is not a promise that every field exists in every 3.6 image. Raw environment variables or Helm values internal to the `llm-d-async` image are not independently supported by this operator unless they are represented by these CRD fields.
+This is the complete configuration surface exposed by the #125 head `LLMBatchGateway` CRD for `llm-d-async`; it is not a promise that every field exists in every packaged 3.6 image. Raw environment variables or Helm values internal to the `llm-d-async` image are not independently supported by this operator unless they are represented by these CRD fields.
 
 ## Step 9: Expose the external Batch API
 
@@ -1094,6 +1094,7 @@ For the product documentation team:
 - [xKS BatchGateway rendered snapshot](../charts/rhai-on-xks-chart/test/snapshots/azure-with-batch-gateway.snap.yaml)
 - [OpenShift chart values](../charts/rhai-on-openshift-chart/values.yaml)
 - [OpenShift chart DSC template](../charts/rhai-on-openshift-chart/templates/operator/datasciencecluster.yaml)
-- [llm-d BatchGateway operator API, current main branch](https://github.com/opendatahub-io/llm-d-batch-gateway-operator/blob/main/api/v1alpha1/llmbatchgateway_types.go)
+- [llm-d BatchGateway operator API at async-only PR #125 head](https://github.com/opendatahub-io/llm-d-batch-gateway-operator/blob/74c558c/api/v1alpha1/llmbatchgateway_types.go)
+- [llm-d-async API at async-only PR #125 head](https://github.com/opendatahub-io/llm-d-batch-gateway-operator/blob/74c558c/api/v1alpha1/llmdasync_types.go)
 - [llm-d BatchGateway installation guide](https://llm-d.ai/docs/operations/batch-serving/batch-gateway)
 - [llm-d async processing guide](https://llm-d.ai/docs/operations/batch-serving/asynchronous-processing)
