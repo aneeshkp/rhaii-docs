@@ -228,7 +228,7 @@ components:
         managementState: Removed
 ```
 
-### OpenShift without MaaS (RHAII profile)
+### RHAII on OpenShift without MaaS
 
 Create an overlay such as `values-batch-gateway-openshift.yaml`:
 
@@ -270,16 +270,14 @@ components:
       rhcl: true
 ```
 
-The `rhaii` profile enables the RHAII inference/model-serving stack. Use `operator.type=odh` for an Open Data Hub installation or `operator.type=rhoai` for a Red Hat OpenShift AI installation:
+The `rhaii` profile selects the RHAII inference stack. On the RHOAI platform, use `operator.type=rhoai`; this chart path still renders `DSCInitialization` and `DataScienceCluster` resources for the RHOAI operator:
 
 ```bash
-OPERATOR_TYPE=odh # use rhoai for RHOAI
-
-helm upgrade --install "${OPERATOR_TYPE}" ./charts/rhai-on-openshift-chart \
-  --namespace "${OPERATOR_TYPE}-gitops" \
+helm upgrade --install rhoai ./charts/rhai-on-openshift-chart \
+  --namespace rhoai-gitops \
   --create-namespace \
   --set profile=rhaii \
-  --set operator.type="${OPERATOR_TYPE}" \
+  --set operator.type=rhoai \
   -f values-batch-gateway-openshift.yaml
 ```
 
@@ -296,9 +294,9 @@ spec:
         managementState: Removed
 ```
 
-The OpenShift chart does not need the xKS `Platform` or component-CR configuration. The ODH/RHOAI operator and AI Gateway operator own that reconciliation path.
+The RHAII profile does not bypass the RHOAI operator or DSC reconciliation. The chart renders the DSC and its dependencies; the RHOAI operator and AI Gateway operator own reconciliation.
 
-### OpenShift with MaaS
+### RHAII on OpenShift with MaaS
 
 Use the same `rhaii` profile, but set the AI Gateway MaaS sub-component to `Managed` and configure the MaaS Gateway listener's route selector:
 
@@ -349,16 +347,14 @@ components:
                       maas-gateway-access: "true"
 ```
 
-Install with either operator type:
+Install with the RHOAI operator:
 
 ```bash
-OPERATOR_TYPE=rhoai # use odh for Open Data Hub
-
-helm upgrade --install "${OPERATOR_TYPE}" ./charts/rhai-on-openshift-chart \
-  --namespace "${OPERATOR_TYPE}-gitops" \
+helm upgrade --install rhoai ./charts/rhai-on-openshift-chart \
+  --namespace rhoai-gitops \
   --create-namespace \
   --set profile=rhaii \
-  --set operator.type="${OPERATOR_TYPE}" \
+  --set operator.type=rhoai \
   -f values-batch-gateway-openshift-maas.yaml
 ```
 
@@ -366,7 +362,7 @@ Label every namespace that attaches routes to the MaaS Gateway with `maas-gatewa
 
 ### How RHOAI deploys BatchGateway through the DataScienceCluster
 
-**Terminology:** RHAII is the inference stack/profile configured by these charts. RHOAI is the OpenShift AI platform and operator selected with `operator.type=rhoai`; the RHOAI operator reconciles the DataScienceCluster. These are integration layers, not two separate OpenShift chart versions.
+**Terminology:** RHAII is the inference stack/profile configured by the chart. RHOAI is the OpenShift AI platform and `rhods-operator` selected with `operator.type=rhoai`; the RHOAI operator reconciles the `DataScienceCluster`. The RHAII profile narrows which DSC components are enabled; it does not replace the DSC path.
 
 For RHOAI on OpenShift, the chart does not install the BatchGateway workloads directly. The deployment chain is:
 
