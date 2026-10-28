@@ -313,6 +313,12 @@ components:
             - name: https
               port: 443
               protocol: HTTPS
+              tls:
+                mode: Terminate
+                certificateRefs:
+                  - group: ""
+                    kind: Secret
+                    name: <maas-gateway-tls-secret>
               allowedRoutes:
                 namespaces:
                   from: Selector
@@ -334,7 +340,7 @@ helm upgrade --install "${OPERATOR_TYPE}" ./charts/rhai-on-openshift-chart \
   -f values-batch-gateway-openshift-maas.yaml
 ```
 
-Label every namespace that attaches routes to the MaaS Gateway with `maas-gateway-access=true`. In the MaaS profile, use the SQL async transport, keep PostgreSQL available, and configure `passThroughHeaders` for `Authorization` and any required MaaS subscription header.
+Label every namespace that attaches routes to the MaaS Gateway with `maas-gateway-access=true`; apply that label to the BatchGateway and model namespaces before creating their HTTPRoutes. Provide the referenced `<maas-gateway-tls-secret>` before creating the HTTPS Gateway. In the MaaS profile, use the SQL async transport, keep PostgreSQL available, and configure `passThroughHeaders` for `Authorization` and any required MaaS subscription header.
 
 ### Verify operator enablement
 
@@ -369,15 +375,16 @@ The xKS chart snapshot confirms that the chart creates the BatchGateway operator
 
 ## Migration warning: sync to async is breaking
 
-RHAII 3.6 supports asynchronous dispatch only. The async-only operator change is not an in-place conversion for an existing synchronous deployment:
+RHAII 3.6 supports asynchronous dispatch only. Based on [operator PR #125](https://github.com/opendatahub-io/llm-d-batch-gateway-operator/pull/125), the async-only operator change is not an in-place conversion for an existing synchronous deployment:
 
 1. Stop submitting new batches.
-2. Drain active batches and the selected Redis/Valkey or SQL dispatch queue. Confirm that no jobs remain in flight using the Batch API, operator status, and the transport's metrics or logs. Do not delete the old `LLMBatchGateway` resource while work is still pending.
-3. Keep PostgreSQL and the file-storage backend. PostgreSQL and object storage contain completed job state and results; deleting them destroys the migration data.
-4. After the queue and active work are drained, delete the old synchronous `LLMBatchGateway` resource.
-5. Deploy the async-only operator release and apply a new CR with `processor.asyncConfig` and exactly one transport (`redis` or `sql`). Do not restore `dispatchMode: sync` or `globalInferenceGateway`.
+2. Drain active batches and the PostgreSQL-backed job state. Confirm that no batches remain in non-terminal states and that processor leases or pending work are cleared using the Batch API, operator status, and application metrics or logs.
+3. If the old deployment was already asynchronous, also drain its Redis/Valkey or SQL dispatch queue. A synchronous deployment has no async dispatch queue; do not invent one during the cutover.
+4. Keep PostgreSQL and the file-storage backend. Do not manually delete PostgreSQL rows or completed results; PostgreSQL and object storage contain migration data.
+5. After active work, PostgreSQL-backed pending state, and any async transport queue are drained, delete the old `LLMBatchGateway` resource.
+6. Deploy the async-only operator release and apply a new CR with `processor.asyncConfig` and exactly one transport (`redis` or `sql`). Do not restore `dispatchMode: sync` or `globalInferenceGateway`.
 
-Deleting the old resource before the drain loses in-flight batches. There is no sync-to-async compatibility mode in operator PR #125; treat the migration as a controlled stop, drain, delete, and redeploy operation.
+Deleting the old resource before the drain loses in-flight batches. Preserve PostgreSQL and object storage through the cutover; they are retained data stores, not resources to empty or delete.
 
 ## Step 2: Prepare namespaces and access labels
 
@@ -394,9 +401,12 @@ kubectl label namespace "${BATCH_NAMESPACE}" \
   llm-d.ai/gateway-route=true --overwrite
 kubectl label namespace "${MODEL_NAMESPACE}" \
   llm-d.ai/gateway-route=true --overwrite
+# Add this label when using a MaaS profile:
+kubectl label namespace "${BATCH_NAMESPACE}" "${MODEL_NAMESPACE}" \
+  maas-gateway-access=true --overwrite
 ```
 
-The `llm-d.ai/gateway-route=true` label satisfies the xKS chart's KServe Gateway attachment selector and is also used by the BatchGateway internal Gateway example below. The exact label and listener policies must match the installed release.
+The `llm-d.ai/gateway-route=true` label satisfies the xKS chart's KServe Gateway attachment selector and is also used by the BatchGateway internal Gateway example below. The `maas-gateway-access=true` label is additionally required when the selected MaaS Gateway listener uses that route selector. The exact labels and listener policies must match the installed release.
 
 ## Step 3: Configure model priority and flow control
 
