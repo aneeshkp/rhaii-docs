@@ -47,6 +47,7 @@ BatchGateway is **user opt-in**. Enabling the AI Gateway module does not automat
   - [Filesystem storage variant](#filesystem-storage-variant)
   - [TLS variants](#tls-variants)
   - [Optional async processor configuration](#optional-async-processor-configuration)
+  - [Complete async processor configuration inventory](#complete-async-processor-configuration-inventory)
 - [Step 9: Expose the external Batch API](#step-9-expose-the-external-batch-api)
 - [Step 10: Verify the installation](#step-10-verify-the-installation)
 - [Step 11: Submit a test batch](#step-11-submit-a-test-batch)
@@ -913,6 +914,32 @@ processor:
 ```
 
 `asyncConfig.replicas` is reserved by the current operator and does not change the async-processor replica count. Do not use it as a scaling control without confirming a later operator version.
+
+### Complete async processor configuration inventory
+
+The examples above cover the supported Redis/Valkey and PostgreSQL transport patterns. The operator-exposed `processor.asyncConfig` fields are listed here so that optional configuration is not mistaken for an unsupported setting. Availability is release-dependent; verify the installed 3.6 CRD before using a field:
+
+| Field | Purpose |
+|---|---|
+| `replicas` | Reserved by the current operator; it does not scale or suspend `llm-d-async`. |
+| `resources` | CPU and memory requests/limits for the async processor. |
+| `imagePullPolicy` | Container image pull policy. |
+| `inferenceGateway` | Default inference gateway connection; queue-level `igwBaseURL` can override it. |
+| `concurrency` | Number of concurrent inference requests dispatched by the async processor. |
+| `drainTimeout` | Graceful-shutdown timeout for in-flight requests. |
+| `resultPollTimeout` | Maximum wait for an async dispatch result. |
+| `redis` | Redis/Valkey transport: `requestPathURL`, `pollIntervalMs`, `batchSize`, `gateType`, `gateParams`, and `queuesConfig`. |
+| `sql` | PostgreSQL transport: `pollIntervalMs`, `batchSize`, `maxConnections`, `resultBatchSize`, `leaseTTLSeconds`, `handoffTimeoutSeconds`, and `queuesConfig`. |
+| `workerPools` | Named worker pools with `name`, `workers`, `gateType`, and `gateParams`. |
+| `prometheusURL` | Prometheus endpoint used by dispatch gates. |
+| `prometheusCacheTTL` | Cache lifetime for Prometheus gate queries. |
+| `tls` | Inference-gateway TLS: `secretName`, `insecureSkipVerify`, `caCertKey`, `certKey`, and `keyKey`. |
+| `transformConfig` | Request transforms with `name`, `type`, and arbitrary `parameters`. |
+| `modelServerMonitor` | Optional model-server `PodMonitor`: `enabled`, `selector`, `port`, `path`, and `interval`. |
+
+Async queue entries support these per-queue overrides: `name`, `workerPoolID`, `igwBaseURL`, `requestPathURL`, `gateType`, and `gateParams`. `processor.modelGateways.<model-id>` also supports the async pool/objective and queue fields plus per-gateway timeout, retry/backoff, and TLS settings from `InferenceGatewaySpec`.
+
+This is the complete configuration surface exposed by the current `LLMBatchGateway` CRD for `llm-d-async`; it is not a promise that every field exists in every 3.6 image. Raw environment variables or Helm values internal to the `llm-d-async` image are not independently supported by this operator unless they are represented by these CRD fields.
 
 ## Step 9: Expose the external Batch API
 
