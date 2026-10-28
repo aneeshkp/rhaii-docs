@@ -91,6 +91,7 @@ Use production-grade persistence, backups, credentials, TLS, and high availabili
 ### xKS
 
 Create an overlay such as `values-batch-gateway-xks.yaml`:
+
 ```yaml
 components:
   kserve:
